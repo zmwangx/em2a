@@ -1,0 +1,18 @@
+#!/usr/bin/env zsh
+
+[[ $1 == (|-h|--help) ]] && {
+    cat >&2 <<EOF
+Usage: $0:t <dest>
+
+If <dest> is a directory, install the wrapper into <dest> as em2a; otherwise,
+install the wrapper exactly as <dest>.
+EOF
+    exit 1
+}
+
+here=$0:A:h
+[[ -d $1 ]] && dest=${1%/}/em2a || dest=$1
+cat >$dest <<EOF && chmod +x $dest && echo "Successfully installed as ${(q-)dest}" >&2 || { echo "Failed to install as ${(q-)dest}" >&2; exit 1; }
+#!/bin/sh
+cd ${(qq)here} && bundle exec em2a "\$@"
+EOF

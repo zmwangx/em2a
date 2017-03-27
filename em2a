@@ -1,0 +1,62 @@
+#!/usr/bin/env ruby
+
+require "shellwords"
+require "emoji/extractor"
+
+if ARGV.length == 0 || ARGV[0] =~ /^(|-h|--help)$/
+  abort <<-EOS
+Usage: em2a <string> [<string> ...]
+
+Each string can contain zero or more raw UTF-8 emojis or :alias:-styled emoji
+escape sequences.
+EOS
+end
+
+# Extract emojis into images/ if we haven't already done so
+$image_dir = File.join(__dir__, "images")
+unless Dir.exists? $image_dir
+  Emoji::Extractor.new(160, "images").extract!
+  Dir["#{Emoji.images_path}/*.png"].each do |png|
+    FileUtils.cp(png, File.join($image_dir, File.basename(png)))
+  end
+end
+
+$exitstatus = 0
+
+def emoji_to_ascii(repr)
+  if repr.length == 1
+    emoji = Emoji.find_by_unicode(repr)
+  else
+    emoji = Emoji.find_by_alias(repr[1..-2])
+  end
+
+  if emoji.nil?
+    STDERR.puts "Error: '#{repr}' is not recognized as an emoji."
+    $exitstatus = 1
+    return nil
+  end
+
+  image = File.join($image_dir, emoji.image_filename)
+  ascii_emoji = `convert -flatten #{Shellwords.escape(image)} jpg:- | jp2a --background=light --size=80x30 -`
+  return ascii_emoji if $?.exitstatus == 0
+  STDERR.puts "Error: Failed to generate ASCII art for #{repr}."
+  $exitstatus = 1
+  return nil
+end
+
+source = ARGV.join(" ")
+ascii_emojis = []
+while source =~ /:[a-z0-9_+-]+:/i
+  match = $~[0].downcase
+  match_begin = $~.begin(0)
+  match_end = $~.end(0)
+  if match_begin != 0
+    ascii_emojis += source[0..match_begin-1].gsub(/\s+/, "").chars.map { |ch| emoji_to_ascii(ch) }
+  end
+  ascii_emojis << emoji_to_ascii(match)
+  source = source[match_end..-1]
+end
+ascii_emojis += source.gsub(/\s+/, "").chars.map { |ch| emoji_to_ascii(ch) }
+
+puts ascii_emojis.reject(&:nil?).join("\n\n")
+exit $exitstatus
